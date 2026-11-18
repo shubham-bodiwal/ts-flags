@@ -1,23 +1,60 @@
 # ts-flags
 
-Tiny, type-safe feature flags for TypeScript and React.
+Type-safe feature flags for TypeScript and React in about 2 kB, with rules, stable percentage rollouts and no service to run.
 
-- **~2 kB gzipped** for the core and React binding together, zero runtime dependencies (`pnpm size` enforces a 3 kB budget)
-- **Typed from one definition.** Flag names, value types and string variants are inferred, so `useFlag('newChekout')` is a compile error
-- **Rules:** user ids, attributes, percentage rollouts with stable hashing, date windows
-- **Dev overrides** from `?flags=` or `localStorage`
-- **SSR-safe** for Next.js: deterministic evaluation, overrides applied only after hydration
-- **Remote JSON config** through a small adapter, with a TTL cache and stale-on-error
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)](test)
+[![Coverage](https://img.shields.io/badge/coverage-100%25%20lines-brightgreen)](vitest.config.ts)
+[![Size](https://img.shields.io/badge/size-2.1%20kB%20gzipped-informational)](scripts/size.mjs)
+
+![Output of examples/demo.mjs: four users get different flag values, a 20% rollout enables 2,040 of 10,000 users, overrides and remote config are applied and invalid values dropped](docs/demo-output.png)
+
+The image is the real output of [`examples/demo.mjs`](examples/demo.mjs).
+
+## Features
+
+- **Typed from one definition.** Flag names, value types and string variants are inferred, so `useFlag('newChekout')` is a compile error.
+- **Rules:** user ids, attributes, percentage rollouts with stable hashing, date windows. First match wins.
+- **Dev overrides** from `?flags=` or `localStorage`, coerced to the flag's type.
+- **SSR-safe** for Next.js: deterministic evaluation, overrides applied only after hydration.
+- **Remote JSON config** through a small adapter, with a TTL cache and stale-on-error. Bad remote values are dropped, not thrown.
+- **Small:** about 2 kB gzipped for the core and React binding together, zero runtime dependencies. `pnpm size` enforces a 3 kB budget.
 
 ## Why
 
 Most apps start with `if (process.env.NEXT_PUBLIC_NEW_CHECKOUT === 'true')` and end up with stringly-typed flags spread across the codebase. Hosted platforms solve this well, but they bring a service, an SDK and a bill. `ts-flags` sits in between: flags live in your repo as typed data, rules run locally, and a JSON file or endpoint can change them without a deploy.
 
-## 30-second example
+## Quick start
+
+Not on npm yet, so build it from source:
 
 ```bash
-npm install ts-flags
+git clone https://github.com/shubham-bodiwal/ts-flags.git
+cd ts-flags
+pnpm install
+pnpm build
+node examples/demo.mjs
 ```
+
+Output:
+
+```text
+qa-1    {"newCheckout":true,"theme":"light","pageSize":20}
+u-42    {"newCheckout":true,"theme":"light","pageSize":50}
+u-7     {"newCheckout":false,"theme":"light","pageSize":20}
+u-1001  {"newCheckout":false,"theme":"light","pageSize":20}
+
+20% rollout over 10,000 users: 2040 enabled
+overrides newCheckout="true" theme="dark" pageSize="oops" -> {"newCheckout":true,"theme":"dark","pageSize":20}
+remote config (theme "neon" is not a variant, dropped) -> {"newCheckout":true,"theme":"light","pageSize":20}
+```
+
+`qa-1` is a named tester, `u-42` is on the pro plan in India, and the other two fall through to the 20% rollout (they are not in it). `pageSize: "oops"` is not a number, so the override is ignored.
+
+To use it in your app, run `pnpm pack` and install the tarball, or `pnpm link` the folder.
+
+## Usage
 
 ```ts
 // flags.ts
@@ -125,7 +162,23 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
 Server and client evaluate the same rules on the same inputs, so hydration matches. Dev overrides apply after mount. For date windows that are exactly on a boundary during a request, pass the same `context.now` to both sides.
 
-## Design decisions
+## How it works
+
+```mermaid
+flowchart LR
+  D["defineFlags(defs)<br/>typed, plain data"] --> C[createFlags client]
+  R["remote JSON<br/>(jsonSource)"] -- "apply(), invalid values dropped" --> C
+  O["overrides<br/>?flags= / localStorage"] --> C
+  X["context<br/>userId, attributes, now"] --> C
+  C --> G{"get(name)"}
+  G --> V1[override?]
+  V1 -- no --> V2[first matching rule?]
+  V2 -- no --> V3[default]
+```
+
+Precedence is **override > first matching rule > default**. The React binding subscribes with `useSyncExternalStore`, so a component re-renders only when its own flag changes.
+
+### Design decisions
 
 - **Definitions are plain data.** No classes or callbacks, so the same object can be serialised, sent from a server component, or replaced by remote JSON.
 - **Types come from the definition, not codegen.** `defineFlags` uses a `const` type parameter to infer variants, then checks every rule value and default against the flag's type.
@@ -148,13 +201,26 @@ Server and client evaluate the same rules on the same inputs, so hydration match
 
 These tools do far more than `ts-flags`. Pick one of them when you need a dashboard for non-engineers, audit trails or experiment statistics.
 
-## Development
+## Tests
 
 ```bash
-pnpm install
-pnpm check   # typecheck (incl. type tests) + tests with 95% coverage gate + build + size budget
+pnpm test       # 44 tests (Vitest)
+pnpm check      # lint + typecheck (incl. type tests) + tests with a 95% coverage gate + build + size budget
 ```
+
+44 tests across core evaluation, overrides and the JSON source, the React binding, and compile-time type tests (`test/types.test.ts`). Coverage is 100% of lines and 99% of branches.
+
+## Roadmap
+
+- Publish to npm.
+- `ts-flags/next` helper that reads overrides from cookies in server components.
+- Optional polling helper for `jsonSource`.
+- A small CLI that validates a remote JSON file against the definitions.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks, and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: [SECURITY.md](SECURITY.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[MIT](./LICENSE) © Shubham Bhodiwal
+[MIT](LICENSE) © Shubham Bhodiwal
