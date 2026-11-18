@@ -36,12 +36,15 @@ export function createFlagHooks<D extends Flags>(defs: D) {
     const ctxKey = JSON.stringify(context ?? null);
     const configKey = JSON.stringify(config ?? null);
     const overridesKey = JSON.stringify(overrides ?? false);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by JSON so inline objects don't re-apply
     useEffect(() => {
       if (context) c.setContext(context);
     }, [c, ctxKey]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by JSON so inline objects don't re-apply
     useEffect(() => {
       if (config) c.apply(config);
     }, [c, configKey]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by JSON so inline objects don't re-apply
     useEffect(() => {
       if (overrides) c.setOverrides(readOverrides(overrides === true ? {} : overrides));
     }, [c, overridesKey]);

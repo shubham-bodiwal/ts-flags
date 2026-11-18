@@ -33,6 +33,7 @@ export interface FlagDef<T extends Primitive = Primitive> {
   description?: string;
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: each flag has its own value type; `defineFlags` checks them individually
 export type Flags = Record<string, FlagDef<any>>;
 type Widen<T> = T extends boolean ? boolean : T extends number ? number : T extends string ? string : never;
 /** The value type of one flag definition. */
@@ -131,7 +132,9 @@ export function createFlags<D extends Flags>(defs: D, options: ClientOptions = {
   let overrides = options.overrides ?? {};
   let remote: Record<string, FlagDef> = {};
   const listeners = new Set<() => void>();
-  const emit = () => listeners.forEach((l) => l());
+  const emit = () => {
+    for (const l of listeners) l();
+  };
 
   const get = (name: string): Primitive => {
     const def: FlagDef | undefined = defs[name];
@@ -249,7 +252,7 @@ export function jsonSource(url: string, opts: JsonSourceOptions = {}): FlagSourc
     load() {
       if (cache && Date.now() - cache.at < ttl) return Promise.resolve(cache.data);
       const doFetch = opts.fetch ?? globalThis.fetch;
-      return (pending ??= doFetch(url, init)
+      pending ??= doFetch(url, init)
         .then((res) => {
           if (!res.ok) throw new Error(`ts-flags: ${url} responded ${res.status}`);
           return res.json() as Promise<RemoteConfig>;
@@ -269,7 +272,8 @@ export function jsonSource(url: string, opts: JsonSourceOptions = {}): FlagSourc
         })
         .finally(() => {
           pending = undefined;
-        }));
+        });
+      return pending;
     },
   };
 }
